@@ -11,9 +11,9 @@ all:
 	rm -rf _build;
 	rm -rf prototype_c201;
 	mkdir ebin;
-	rebar3 compile;	
-	cp _build/default/lib/*/ebin/* ebin;
-	rm -rf _build;
+	erlc -I include -o ebin src/*.erl;
+	mkdir tests_ebin;
+	erlc -I include -o tests_ebin tests/*.erl;
 	rm -rf tests_ebin;
 	rm -rf ebin;
 	git add *;
