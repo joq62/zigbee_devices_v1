@@ -27,7 +27,7 @@ start()->
 
     ok=setup(),
        
-    ok=hw_conbee_tests:start(),
+    ok=zigbee_tests:start(),
     
    
    

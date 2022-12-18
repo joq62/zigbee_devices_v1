@@ -9,7 +9,7 @@
 %%% Pod consits beams from all services, app and app and sup erl.
 %%% The setup of envs is
 %%% -------------------------------------------------------------------
--module(oam_tests).      
+-module(st_cl).      
  
 -export([start/0]).
 %% --------------------------------------------------------------------
@@ -29,12 +29,11 @@ start()->
     ok=start_cluster_test(),
     ok=hw_conbee_app_test(),
     % ok=deploy_appls_test(),
-    
-
-  
+     
   
     io:format("Stop OK !!! ~p~n",[{?MODULE,?FUNCTION_NAME}]),
-
+    init:stop(),
+    timer:sleep(2000),
     ok.
 
 %% --------------------------------------------------------------------
@@ -49,43 +48,13 @@ hw_conbee_app_test()->
     oam:new_appl(ApplSpec,HostSpec,60*1000),
     AllApps=oam:all_apps(),
     io:format("AllApps ~p~n",[{AllApps,?MODULE,?FUNCTION_NAME}]),
-    
+    pong=rd:rpc_call(hw_conbee,hw_conbee,ping,[],2000),
+
+    AllSensors=rd:rpc_call(hw_conbee,hw_conbee,get_all_device_info,["sensors"],2000),
+    io:format("AllSensors ~p~n",[{AllSensors,?MODULE,?FUNCTION_NAME}]),
+    AllLights=rd:rpc_call(hw_conbee,hw_conbee,get_all_device_info,["lights"],2000),
+    io:format("AllLights ~p~n",[{AllLights,?MODULE,?FUNCTION_NAME}]),
     ok.
-    
-    
-    
-
-%% --------------------------------------------------------------------
-%% Function: available_hosts()
-%% Description: Based on hosts.config file checks which hosts are avaible
-%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
-%% --------------------------------------------------------------------
-deploy_appls_test()->
-    io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
-    
-    ok=oam:deploy_appls(),
-    _AllApps=oam:all_apps(),
-  %  io:format("AllApps ~p~n",[{AllApps,?MODULE,?FUNCTION_NAME}]),
-    {ok,HereIsIt}=oam:where_is_app(math),
-  %  io:format("HereIsIt ~p~n",[{HereIsIt,?MODULE,?FUNCTION_NAME}]),
-    [PodNode|_]=HereIsIt,
-    42=rpc:call(PodNode,test_add,add,[20,22],2000),
-
-    {ok,PresentApps}=oam:present_apps(),
-    io:format("PresentApps ~p~n",[{PresentApps,?MODULE,?FUNCTION_NAME}]),
-    {ok,MissingApps}=oam:missing_apps(),
-    io:format("MissingApps ~p~n",[{MissingApps,?MODULE,?FUNCTION_NAME}]),
-    
-    
-    
-
-    ok.
-
-%% --------------------------------------------------------------------
-%% Function: available_hosts()
-%% Description: Based on hosts.config file checks which hosts are avaible
-%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
-%% --------------------------------------------------------------------
 %%-----------------------------------------------------------------
 %% Function: available_hosts()
 %% Description: Based on hosts.config file checks which hosts are avaible
@@ -93,26 +62,32 @@ deploy_appls_test()->
 %% --------------------------------------------------------------------
 start_cluster_test()->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
-    
-    
-    glurk_not_implmented=oam:is_cluster_deployed(),
-    []=oam:new_connect_nodes(),
-
-    ok=oam:new_db_info(),
-    []=oam:new_connect_nodes(),
-    {ok,PingNodes}=oam:ping_connect_nodes(),
-    [{pong,'prototype_c201_connect@c201'}]=lists:sort(PingNodes),
        
+    ok=oam:new_db_info(),
+    oam:new_connect_nodes(),
+    {ok,[{pong,'prototype_c201_connect@c201'}]}=oam:ping_connect_nodes(),
+    
+    %[
+    % {pong,'"prototype_c201_connect@c201'}
+    %]=lists:sort(PingNodes),
+    
     {PresentControllers,MissingControllers}=oam:new_controllers(),
+ %   io:format("PresentControllers,MissingControllers ~p~n",[{PresentControllers,MissingControllers,?MODULE,?FUNCTION_NAME}]),
+
     ['1_prototype_c201_controller@c201']= lists:sort(PresentControllers),
     []=MissingControllers,
    
     {PresentWorkers,MissingWorkers}=oam:new_workers(),
+  %  io:format("PresentWorkers,MissingWorkers ~p~n",[{PresentWorkers,MissingWorkers,?MODULE,?FUNCTION_NAME}]),
+    
     [
-     '1_prototype_c201_worker@c201',
-     '2_prototype_c201_worker@c201'
+     '1_prototype_c201_worker@c201','2_prototype_c201_worker@c201'
+    
     ]=lists:sort(PresentWorkers),
     []=MissingWorkers,
+
+    Nodes=[{Node,rpc:call(Node,erlang,nodes,[],2000)}||Node<-nodes()],
+    io:format(" Nodes ~p~n",[{Nodes,?MODULE,?FUNCTION_NAME}]),
     
   
     ok.
