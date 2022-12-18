@@ -34,6 +34,15 @@
 %% External functions
 %% ====================================================================
 
+%% zigbee_server:is_on("switch_prototype")
+%  zigbee_server:is_reachable("switch_prototype")
+%  Switch=rd:rpc_call(hw_conbee,hw_conbee,get,["switch_prototype"],2000),
+% Switch {{ok,[{"switch_prototype","5","TRADFRI control outlet","lights",
+%              #{<<"alert">> => <<"none">>,<<"on">> => true,
+%                <<"reachable">> => true}}]},
+%% zigbee_server:set("switch_prototype","off")
+%%  Switch=rd:rpc_call(hw_conbee,hw_conbee,set,["switch_prototype","off"],2000),
+
 
 %% --------------------------------------------------------------------
 %% Function:start/0 
