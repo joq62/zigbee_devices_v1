@@ -28,6 +28,7 @@ start()->
     ok=setup(),
        
     ok=zigbee_tests:start(),
+    ok=pid_tests:start(),
     
    
    

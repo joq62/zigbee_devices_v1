@@ -7,20 +7,24 @@
 %%% 
 %%% Created : 10 dec 2012
 %%% -------------------------------------------------------------------
--module(zigbee_devices_server).
+-module(pid_server). 
  
 -behaviour(gen_server).
 
 %% --------------------------------------------------------------------
 %% Include files
 %% --------------------------------------------------------------------
--include("device.hrl").
+
 %% --------------------------------------------------------------------
 
 %% External exports
 -export([
-	 get/3,
-	 set/3
+	 on/0,
+	 off/0,
+	 calibrate/1,
+	 temp/0,
+	 loop_temp/1
+	 
 	]).
 
 
@@ -38,8 +42,45 @@
 -export([init/1, handle_call/3,handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %%-------------------------------------------------------------------
+-define(Kp,0,5).
+-define(Ki,0,5).
+-define(Kd,0,5).
+-define(Dt,20*1000).
+-define(PwmInterval,50*1000).
+-define(TempSensor,"temp_prototype").
+-define(Switch,"switch_prototype").
 
+
+% Kp - proportional gain
+% Ki - integral gain
+% Kd - derivative gain
+% dt - loop interval time
+% previous_error := 0
+% integral := 0
+% loop:
+%   error := setpoint − measured_value
+%   proportional := error;
+%   integral := integral + error × dt
+%   derivative := (error − previous_error) / dt
+%   output := Kp × proportional + Ki × integral + Kd × derivative
+%   previous_error := error
+%   wait(dt)
+%   goto loop
+%   pwm_interval = 50 seconds 
+%   dt= 20 sec						%
+%   0 <= pwm_value <= pwm_interval  
 -record(state,{
+	       pwm_interval,
+	       pwm_value,
+	       setpoint,
+	       previous_error,
+	       integral,
+	       kp,
+	       ki,
+	       kd,
+	       dt
+	       
+	       
 	      }).
 
 
@@ -51,17 +92,21 @@
 %% call
 start()-> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 stop()-> gen_server:call(?MODULE, {stop},infinity).
-
-
-get(DeviceName,Function,Args)-> 
-    gen_server:call(?MODULE, {get,DeviceName,Function,Args},infinity).
-set(DeviceName,Function,Args)-> 
-    gen_server:call(?MODULE, {set,DeviceName,Function,Args},infinity).
-
 ping()-> 
     gen_server:call(?MODULE, {ping},infinity).
-%% cast
 
+temp()-> 
+    gen_server:call(?MODULE, {temp},infinity).
+%% cast(
+calibrate(EndTemp)-> 
+    gen_server:cast(?MODULE, {calibrate,EndTemp}).
+loop_temp(Interval)-> 
+    gen_server:cast(?MODULE, {loop_temp,Interval}).
+
+on()-> 
+    gen_server:cast(?MODULE, {on}).
+off()-> 
+    gen_server:cast(?MODULE, {off}).
 %% ====================================================================
 %% Server functions
 %% ====================================================================
@@ -75,6 +120,7 @@ ping()->
 %%          {stop, Reason}
 %% --------------------------------------------------------------------
 init([]) ->
+    
     rd:rpc_call(nodelog,nodelog,log,[notice,?MODULE_STRING,?LINE,["Server started"]]),
     {ok, #state{}}.   
  
@@ -89,39 +135,8 @@ init([]) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
-handle_call({set,DeviceName,Function,Args},_From, State) ->
-    Reply=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
-	      {error,Reason}->
-		  {error,Reason};
-	      {ok,[DeviceInfo|_]}->
-		  ModelId=maps:get(device_model,DeviceInfo),
-		  [Module]=[maps:get(module,Map)||Map<-?DeviceInfo,
-						  ModelId==maps:get(model_id,Map)],
-		  AllArgs=[DeviceName|Args],
-		  rpc:call(node(),Module,Function,AllArgs,2000);
-	      UnMatchedSignal->
-		  {error,UnMatchedSignal}
-	  end,
-    {reply, Reply, State};
-
-handle_call({get,DeviceName,Function,Args},_From, State) ->
-    Reply=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
-	      {error,Reason}->
-		  {error,Reason};
-	      {ok,[DeviceInfo|_]}->
-		  ModelId=maps:get(device_model,DeviceInfo),
-		  [Module]=[maps:get(module,Map)||Map<-?DeviceInfo,
-						  ModelId==maps:get(model_id,Map)],
-		  AllArgs=[DeviceName|Args],
-		  rpc:call(node(),Module,Function,AllArgs,2000);
-	      UnMatchedSignal->
-		  {error,UnMatchedSignal}
-	  end,
-    {reply, Reply, State};
-
-
-handle_call({status,DeviceName},_From, State) ->
-    Reply=State,
+handle_call({temp},_From, State) ->
+    Reply=zigbee_devices_server:get(?TempSensor,temp,[]),
     {reply, Reply, State};
 
 handle_call({ping},_From, State) ->
@@ -139,6 +154,17 @@ handle_call(Request, From, State) ->
 %%          {noreply, State, Timeout} |
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
+handle_cast({on}, State) ->
+    zigbee_devices_server:get(?Switch,set,["on"]),
+    {noreply, State};
+handle_cast({off}, State) ->
+    zigbee_devices_server:get(?Switch,set,["off"]),
+    {noreply, State};
+handle_cast({calibrate,EndTemp}, State) ->
+    spawn(fun()->do_calibrate(EndTemp) end),
+   
+    {noreply, State};
+
 handle_cast(Msg, State) ->
     io:format("unmatched match cast ~p~n",[{Msg,?MODULE,?LINE}]),
     {noreply, State}.
@@ -185,3 +211,23 @@ code_change(_OldVsn, State, _Extra) ->
 %% Description: Initiate the eunit tests, set upp needed processes etc
 %% Returns: non
 %% --------------------------------------------------------------------
+do_calibrate(EndTemp)->
+    StartTime=os:system_time(second),
+    zigbee_devices_server:get(?Switch,set,["on"]),
+    loop(StartTime,EndTemp).
+
+loop(StartTime,EndTemp)->
+    {ok,Temp}=zigbee_devices_server:get(?TempSensor,temp,[]),
+    DiffTemp=EndTemp-list_to_float(Temp),
+    Time=os:system_time(second)-StartTime,
+    if 
+	DiffTemp<0->
+	    io:format("STOPPED: Time ,DiffTemp  ~p~n",[{Time,DiffTemp,?MODULE,?FUNCTION_NAME,?LINE}]),
+	    zigbee_devices_server:get(?Switch,set,["off"]),
+	    timer:sleep(10*1000),
+	    loop(StartTime,EndTemp);
+	 true->
+	    io:format("Time ,DiffTemp  ~p~n",[{Time,DiffTemp,?MODULE,?FUNCTION_NAME,?LINE}]),
+	    timer:sleep(15*1000),
+	    loop(StartTime,EndTemp)
+    end.
