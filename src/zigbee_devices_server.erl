@@ -81,7 +81,7 @@ init([]) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
-handle_call({get_state},_From, State) ->
+handle_call({status,DeviceName},_From, State) ->
     Reply=State,
     {reply, Reply, State};
 

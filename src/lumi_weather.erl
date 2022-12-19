@@ -38,32 +38,52 @@
 %% Returns: non
 %% --------------------------------------------------------------------
 
-temp(Name)->
-    {ok,List}=lib_conbee:device(?Type,Name),
-    [TempRaw]=[maps:get(<<"temperature">>,StateMap)||{_Name,_NumId,_ModelId,StateMap}<-List,
-					   lists:member( <<"temperature">>,maps:keys(StateMap))],
-    float_to_list(TempRaw/100,[{decimals,1}]).
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% --------------------------------------------------------------------
-
-humidity(Name)->
-    {ok,List}=lib_conbee:device(?Type,Name),
-    [HumidityRaw]=[maps:get(<<"humidity">>,StateMap)||{_Name,_NumId,_ModelId,StateMap}<-List,
-					   lists:member( <<"humidity">>,maps:keys(StateMap))],
-    float_to_list(HumidityRaw/100,[{decimals,1}])++"%".
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% --------------------------------------------------------------------
-
-pressure(Name)->
-    {ok,List}=lib_conbee:device(?Type,Name),
-    [PressureRaw]=[maps:get(<<"pressure">>,StateMap)||{_Name,_NumId,_ModelId,StateMap}<-List,
-					   lists:member( <<"pressure">>,maps:keys(StateMap))],
-    integer_to_list(PressureRaw).
+temp(DeviceName)->
+    Result=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
+	       {error,Reason}->
+		   {error,Reason};
+	       {ok,Maps}-> 
+		   [WantedMap]=[Map||Map<-Maps,
+				    lists:member(<<"temperature">>, maps:keys(maps:get(device_status,Map)))],
+		   StateMap=maps:get(device_status,WantedMap),
+		   TempRaw=maps:get(<<"temperature">>,StateMap),
+		   {ok,float_to_list(TempRaw/100,[{decimals,1}])}
+	   end,
+    Result.
     
+%% --------------------------------------------------------------------
+%% Function:start/0 
+%% Description: Initiate the eunit tests, set upp needed processes etc
+%% Returns: non
+%% --------------------------------------------------------------------
+humidity(DeviceName)->
+    Result=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
+	       {error,Reason}->
+		   {error,Reason};
+	       {ok,Maps}-> 
+		   [WantedMap]=[Map||Map<-Maps,
+				    lists:member(<<"humidity">>, maps:keys(maps:get(device_status,Map)))],
+		   StateMap=maps:get(device_status,WantedMap),
+		   HumidityRaw=maps:get(<<"humidity">>,StateMap),
+		   {ok,float_to_list(HumidityRaw/100,[{decimals,1}])++"%"}
+	   end,
+    Result.
+
+%% --------------------------------------------------------------------
+%% Function:start/0 
+%% Description: Initiate the eunit tests, set upp needed processes etc
+%% Returns: non
+%% --------------------------------------------------------------------
+%<<"pressure">>
+pressure(DeviceName)->
+    Result=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
+	       {error,Reason}->
+		   {error,Reason};
+	       {ok,Maps}-> 
+		   [WantedMap]=[Map||Map<-Maps,
+				    lists:member(<<"pressure">>, maps:keys(maps:get(device_status,Map)))],
+		   StateMap=maps:get(device_status,WantedMap),
+		   PressureRaw=maps:get(<<"pressure">>,StateMap),
+		   {ok, integer_to_list(PressureRaw)}
+	   end,
+    Result.
