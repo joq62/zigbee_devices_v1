@@ -19,10 +19,12 @@
 
 %% External exports
 -export([
+	 control_loop/2,
 	 on/0,
 	 off/0,
 	 calibrate/1,
 	 temp/0,
+	 pwm/2,
 	 loop_temp/1
 	 
 	]).
@@ -42,19 +44,20 @@
 -export([init/1, handle_call/3,handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %%-------------------------------------------------------------------
--define(Kp,0,5).
--define(Ki,0,5).
--define(Kd,0,5).
--define(Dt,20*1000).
--define(PwmInterval,50*1000).
+-define(SetPoint,30).
+-define(Kp,6).
+-define(Ki,3).
+-define(Kd,3).
+-define(SampleInterval,15*1000).
+-define(PwmWidth,60*1000).
 -define(TempSensor,"temp_prototype").
 -define(Switch,"switch_prototype").
-
+-define(MaxTempDiff,6).
 
 % Kp - proportional gain
 % Ki - integral gain
 % Kd - derivative gain
-% dt - loop interval time
+% sample_interval - loop interval time
 % previous_error := 0
 % integral := 0
 % loop:
@@ -70,15 +73,14 @@
 %   dt= 20 sec						%
 %   0 <= pwm_value <= pwm_interval  
 -record(state,{
-	       pwm_interval,
-	       pwm_value,
+	       pwm_width,
+	       sample_interval,
 	       setpoint,
 	       previous_error,
 	       integral,
 	       kp,
 	       ki,
-	       kd,
-	       dt
+	       kd
 	       
 	       
 	      }).
@@ -98,11 +100,16 @@ ping()->
 temp()-> 
     gen_server:call(?MODULE, {temp},infinity).
 %% cast(
+pwm(Width,Period)-> 
+    gen_server:cast(?MODULE, {pwm,Width,Period}).
 calibrate(EndTemp)-> 
     gen_server:cast(?MODULE, {calibrate,EndTemp}).
 loop_temp(Interval)-> 
     gen_server:cast(?MODULE, {loop_temp,Interval}).
 
+
+control_loop(PreviousError,Integral)->
+    gen_server:cast(?MODULE, {control_loop,PreviousError,Integral}).
 on()-> 
     gen_server:cast(?MODULE, {on}).
 off()-> 
@@ -122,7 +129,12 @@ off()->
 init([]) ->
     
     rd:rpc_call(nodelog,nodelog,log,[notice,?MODULE_STRING,?LINE,["Server started"]]),
-    {ok, #state{}}.   
+    {ok, #state{ 
+	    pwm_width=?PwmWidth,
+	    setpoint=?SetPoint,
+	    kp=?Kp,
+	    ki=?Ki,
+	    kd=?Kd}}.   
  
 
 %% --------------------------------------------------------------------
@@ -136,7 +148,7 @@ init([]) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
 handle_call({temp},_From, State) ->
-    Reply=zigbee_devices_server:get(?TempSensor,temp,[]),
+    Reply=zigbee_devices:call(?TempSensor,temp,[]),
     {reply, Reply, State};
 
 handle_call({ping},_From, State) ->
@@ -155,14 +167,32 @@ handle_call(Request, From, State) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
 handle_cast({on}, State) ->
-    zigbee_devices_server:get(?Switch,set,["on"]),
+    zigbee_devices:call(?Switch,set,["on"]),
     {noreply, State};
 handle_cast({off}, State) ->
-    zigbee_devices_server:get(?Switch,set,["off"]),
+    zigbee_devices:call(?Switch,set,["off"]),
     {noreply, State};
+
+handle_cast({control_loop,PreviousError,Integral}, State) ->
+    SetPoint=State#state.setpoint,
+    PwmWidth=State#state.pwm_width,
+    Kp=State#state.kp,
+    Kd=State#state.kd,
+    Ki=State#state.ki,
+    spawn(fun()->do_control_loop(SetPoint,PwmWidth,PreviousError,
+				 Integral,Kp,Kd,Ki) end),
+    
+    {ok,Temp}=zigbee_devices:call(?TempSensor,temp,[]),
+    io:format("Temp  ~p~n",[{Temp,?MODULE,?FUNCTION_NAME,?LINE}]),
+   
+    {noreply, State};
+
+handle_cast({pwm,Width,Period}, State) ->
+    spawn(fun()->do_pwm(Width,Period) end),
+    {noreply, State};
+
 handle_cast({calibrate,EndTemp}, State) ->
     spawn(fun()->do_calibrate(EndTemp) end),
-   
     {noreply, State};
 
 handle_cast(Msg, State) ->
@@ -205,7 +235,27 @@ code_change(_OldVsn, State, _Extra) ->
 %% --------------------------------------------------------------------
 %%% Internal functions
 %% --------------------------------------------------------------------
-
+do_control_loop(SetPoint,PwmWidth,PreviousError,Integral,Kp,Kd,Ki)->
+    {ok,MeasuredValue}=zigbee_devices:call(?TempSensor,temp,[]),
+    Error=SetPoint-MeasuredValue,
+    Proportional=Error,
+    NewIntegral=Integral + Error*PwmWidth,
+    NewDerivative=(Error-PreviousError)/PwmWidth,
+    ActualWidth=if
+		    Error>?MaxTempDiff->
+			0;
+		    Error< -?MaxTempDiff->
+			PwmWidth;
+		    true->
+			(Kp*Proportional + Ki*NewIntegral + Kd*NewDerivative)+trunc(PwmWidth/2)
+		end,
+    zigbee_devices:call(?Switch,set,["on"]),
+    timer:sleep(ActualWidth),
+    zigbee_devices:call(?Switch,set,["off"]),
+    timer:sleep(PwmWidth-ActualWidth),
+    NewPreviousError=Error,
+    rpc:cast(node(),?MODULE,control_loop,[NewPreviousError,NewIntegral]).
+    
 %% --------------------------------------------------------------------
 %% Function:start/0 
 %% Description: Initiate the eunit tests, set upp needed processes etc
@@ -213,21 +263,33 @@ code_change(_OldVsn, State, _Extra) ->
 %% --------------------------------------------------------------------
 do_calibrate(EndTemp)->
     StartTime=os:system_time(second),
-    zigbee_devices_server:get(?Switch,set,["on"]),
-    loop(StartTime,EndTemp).
+    zigbee_devices:call(?Switch,set,["on"]),
+    loop_calibrate(StartTime,EndTemp).
 
-loop(StartTime,EndTemp)->
-    {ok,Temp}=zigbee_devices_server:get(?TempSensor,temp,[]),
+loop_calibrate(StartTime,EndTemp)->
+    {ok,Temp}=zigbee_devices:call(?TempSensor,temp,[]),
     DiffTemp=EndTemp-list_to_float(Temp),
     Time=os:system_time(second)-StartTime,
     if 
 	DiffTemp<0->
 	    io:format("STOPPED: Time ,DiffTemp  ~p~n",[{Time,DiffTemp,?MODULE,?FUNCTION_NAME,?LINE}]),
-	    zigbee_devices_server:get(?Switch,set,["off"]),
+	    zigbee_devices:call(?Switch,set,["off"]),
 	    timer:sleep(10*1000),
-	    loop(StartTime,EndTemp);
+	    loop_calibrate(StartTime,EndTemp);
 	 true->
 	    io:format("Time ,DiffTemp  ~p~n",[{Time,DiffTemp,?MODULE,?FUNCTION_NAME,?LINE}]),
 	    timer:sleep(15*1000),
-	    loop(StartTime,EndTemp)
+	    loop_calibrate(StartTime,EndTemp)
     end.
+
+
+do_pwm(Width,Period)->
+ %   {ok,Temp1}=zigbee_devices_server:get(?TempSensor,temp,[]),
+ %   io:format("Temp1  ~p~n",[{Temp1,?MODULE,?FUNCTION_NAME,?LINE}]),
+    zigbee_devices:call(?Switch,set,["on"]),
+    timer:sleep(Width),
+  zigbee_devices:call(?Switch,set,["off"]),
+    timer:sleep(Period-Width),
+    {ok,Temp2}=zigbee_devices:call(?TempSensor,temp,[]),
+    io:format("Temp2  ~p~n",[{Temp2,?MODULE,?FUNCTION_NAME,?LINE}]),
+    do_pwm(Width,Period).

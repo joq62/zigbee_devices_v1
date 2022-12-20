@@ -1,0 +1,53 @@
+-module(pid).
+
+-export([start/0, stop/0]).
+
+start() ->
+  register(pid_controller, spawn(fun() -> loop() end)).
+
+stop() ->
+  pid_controller ! stop.
+
+loop() ->
+  receive
+    {setpoint, SP} ->
+      loop(SP, 0, 0);
+    {measured_output, MO} ->
+      loop(MO, 0, 0);
+    {kp, KP} ->
+      loop(KP, 0, 0);
+    {ki, KI} ->
+      loop(KI, 0, 0);
+    {kd, KD} ->
+      loop(KD, 0, 0);
+    stop ->
+      ok
+  end.
+
+loop(SP, MO, Integral) ->
+  {KP, KI, KD} = get_gains(),
+  Error = SP - MO,
+  Integral = Integral + Error,
+  Derivative = Error - MO,
+  Output = KP * Error + KI * Integral + KD * Derivative,
+  apply_output(Output),
+  receive
+    {setpoint, NewSP} ->
+      loop(NewSP, MO, Integral);
+    {measured_output, NewMO} ->
+      loop(SP, NewMO, Integral);
+    {kp, NewKP} ->
+      loop(SP, MO, Integral, NewKP, KI, KD);
+    {ki, NewKI} ->
+      loop(SP, MO, Integral, KP, NewKI, KD);
+    {kd, NewKD} ->
+      loop(SP, MO, Integral, KP, KI, NewKD);
+    stop ->
+      ok
+  end.
+
+get_gains() ->
+  {1, 0, 0}.
+
+apply_output(Output) ->
+  io:format("Output: ~p~n", [Output]).

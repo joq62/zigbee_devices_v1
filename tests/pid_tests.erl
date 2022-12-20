@@ -27,6 +27,8 @@ start()->
 
     ok=setup(),
     ok=zig_server_test(),
+    ok=control_loop(),
+    
     
     
     
@@ -42,23 +44,36 @@ start()->
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
+control_loop()->
+    
+    PreviousError=0,
+    Integral=0,
+    ok=pid_server:control_loop(PreviousError,Integral),
+    
+    ok.
+
+%% --------------------------------------------------------------------
+%% Function: available_hosts()
+%% Description: Based on hosts.config file checks which hosts are avaible
+%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
+%% --------------------------------------------------------------------
 zig_server_test()-> %  check the prototype
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
   
     DeviceName1="switch_prototype",
-    false=zigbee_devices_server:get(DeviceName1,is_on,[]),
-    {200,_,_}=zigbee_devices_server:get(DeviceName1,set,["on"]),
-    true=zigbee_devices_server:get(DeviceName1,is_on,[]),
+    false=zigbee_devices:call(DeviceName1,is_on,[]),
+    {200,_,_}=zigbee_devices:call(DeviceName1,set,["on"]),
+    true=zigbee_devices:call(DeviceName1,is_on,[]),
     timer:sleep(2000),
-    {200,_,_}=zigbee_devices_server:get(DeviceName1,set,["off"]),
-    false=zigbee_devices_server:get(DeviceName1,is_on,[]),
+    {200,_,_}=zigbee_devices:call(DeviceName1,set,["off"]),
+    false=zigbee_devices:call(DeviceName1,is_on,[]),
 
     DeviceName2="temp_prototype",
-    Temp=zigbee_devices_server:get(DeviceName2,temp,[]),
+    Temp=zigbee_devices:call(DeviceName2,temp,[]),
     io:format("Temp ~p~n",[{Temp,?MODULE,?FUNCTION_NAME}]),
-    Humidity=zigbee_devices_server:get(DeviceName2,humidity,[]),
+    Humidity=zigbee_devices:call(DeviceName2,humidity,[]),
     io:format("Humidity ~p~n",[{Humidity,?MODULE,?FUNCTION_NAME}]),
-    Pressure=zigbee_devices_server:get(DeviceName2,pressure,[]),
+    Pressure=zigbee_devices:call(DeviceName2,pressure,[]),
     io:format("Pressure ~p~n",[{Pressure,?MODULE,?FUNCTION_NAME}]),
 ok.
     

@@ -50,19 +50,19 @@ zig_server_test()-> %  check the prototype
   
 
     DeviceName1="switch_prototype",
-    false=zigbee_devices_server:get(DeviceName1,is_on,[]),
-    {200,_,_}=zigbee_devices_server:get(DeviceName1,set,["on"]),
-    true=zigbee_devices_server:get(DeviceName1,is_on,[]),
+    false=zigbee_devices:call(DeviceName1,is_on,[]),
+    {200,_,_}=zigbee_devices:call(DeviceName1,set,["on"]),
+    true=zigbee_devices:call(DeviceName1,is_on,[]),
     timer:sleep(2000),
-    {200,_,_}=zigbee_devices_server:get(DeviceName1,set,["off"]),
-    false=zigbee_devices_server:get(DeviceName1,is_on,[]),
+    {200,_,_}=zigbee_devices:call(DeviceName1,set,["off"]),
+    false=zigbee_devices:call(DeviceName1,is_on,[]),
 
     DeviceName2="temp_prototype",
-    Temp=zigbee_devices_server:get(DeviceName2,temp,[]),
+    Temp=zigbee_devices:call(DeviceName2,temp,[]),
     io:format("Temp ~p~n",[{Temp,?MODULE,?FUNCTION_NAME}]),
-    Humidity=zigbee_devices_server:get(DeviceName2,humidity,[]),
+    Humidity=zigbee_devices:call(DeviceName2,humidity,[]),
     io:format("Humidity ~p~n",[{Humidity,?MODULE,?FUNCTION_NAME}]),
-    Pressure=zigbee_devices_server:get(DeviceName2,pressure,[]),
+    Pressure=zigbee_devices:call(DeviceName2,pressure,[]),
     io:format("Pressure ~p~n",[{Pressure,?MODULE,?FUNCTION_NAME}]),
 ok.
     
@@ -217,7 +217,7 @@ setup()->
     {ok,_}=appl_server:start(),
     {ok,_}=pod_server:start(),
     {ok,_}=zigbee_devices_server:start(),
-    pong=zigbee_devices_server:ping(),
+    pong=zigbee_devices:ping(),
     ok=application:start(oam),
 
     ok=oam:new_db_info(),

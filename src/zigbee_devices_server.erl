@@ -19,13 +19,12 @@
 
 %% External exports
 -export([
-	 get/3,
-	 set/3
+
 	]).
 
 
 -export([
-	 ping/0,
+
 	 start/0,
 	 stop/0
 	]).
@@ -53,13 +52,8 @@ start()-> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 stop()-> gen_server:call(?MODULE, {stop},infinity).
 
 
-get(DeviceName,Function,Args)-> 
-    gen_server:call(?MODULE, {get,DeviceName,Function,Args},infinity).
-set(DeviceName,Function,Args)-> 
-    gen_server:call(?MODULE, {set,DeviceName,Function,Args},infinity).
 
-ping()-> 
-    gen_server:call(?MODULE, {ping},infinity).
+
 %% cast
 
 %% ====================================================================
@@ -89,6 +83,21 @@ init([]) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
+handle_call({call,DeviceName,Function,Args},_From, State) ->
+    Reply=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
+	      {error,Reason}->
+		  {error,Reason};
+	      {ok,[DeviceInfo|_]}->
+		  ModelId=maps:get(device_model,DeviceInfo),
+		  [Module]=[maps:get(module,Map)||Map<-?DeviceInfo,
+						  ModelId==maps:get(model_id,Map)],
+		  AllArgs=[DeviceName|Args],
+		  rpc:call(node(),Module,Function,AllArgs,2000);
+	      UnMatchedSignal->
+		  {error,UnMatchedSignal}
+	  end,
+    {reply, Reply, State};
+
 handle_call({set,DeviceName,Function,Args},_From, State) ->
     Reply=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
 	      {error,Reason}->

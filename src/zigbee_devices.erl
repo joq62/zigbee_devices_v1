@@ -13,7 +13,7 @@
 
 
 -export([
-
+	 call/3
 
 	]).
 
@@ -40,6 +40,10 @@
 %% --------------------------------------------------------------------
 
 
+
+
+call(DeviceName,Function,Args)-> 
+    gen_server:call(?SERVER, {call,DeviceName,Function,Args},infinity).
 
 ping() ->
     gen_server:call(?SERVER, {ping}).
