@@ -45,14 +45,15 @@
 
 %%-------------------------------------------------------------------
 -define(SetPoint,30).
--define(Kp,6).
+-define(Kp,7).
 -define(Ki,0.01).
--define(Kd,1).
+-define(Kd,2).
 -define(SampleInterval,15*1000).
 -define(PwmWidth,60*1000).
 -define(TempSensor,"temp_prototype").
 -define(Switch,"switch_prototype").
 -define(MaxTempDiff,6).
+-define(BaseOffset,20*1000).
 
 % Kp - proportional gain
 % Ki - integral gain
@@ -238,15 +239,33 @@ code_change(_OldVsn, State, _Extra) ->
 do_control_loop(SetPoint,PwmWidth,PreviousError,Integral,Kp,Kd,Ki)->
     {ok,MeasuredValue}=zigbee_devices:call(?TempSensor,temp,[]),
     Error=SetPoint-list_to_float(MeasuredValue),
-    Proportional=Error,
-    Dt=PwmWidth/1000,
-    NewIntegral=Integral + Error*Dt,
-    NewDerivative=trunc((Error-PreviousError)/Dt),
-    BaseOffset=trunc(PwmWidth/2),
-    PidValue=(Kp*Proportional + Ki*NewIntegral + Kd*NewDerivative)*1000,
-    io:format("PidValue, BaseOffset  ~p~n",[{PidValue,BaseOffset,?MODULE,?FUNCTION_NAME,?LINE}]),
-    ActualWidth=trunc(PidValue+BaseOffset),
-    io:format("ActualWidth, Error, Proportional, NewIntegral, NewDerivative~p~n",[{ActualWidth, Error, Proportional, NewIntegral, NewDerivative,?MODULE,?FUNCTION_NAME,?LINE}]),
+
+    if
+	Error > ?MaxTempDiff->
+	    NewIntegral=Integral*1000,
+	    NewDerivative=0;
+	Error < -1*?MaxTempDiff->
+	    NewIntegral=Integral*1000,
+	    NewDerivative=0;
+	true->
+	    Dt=PwmWidth,
+	    NewIntegral=(Integral + Error*Dt),	  
+	    NewDerivative=-1*trunc((Error-PreviousError)/Dt)
+    end,
+    Proportional=Error*1000,
+    PidValue=(Kp*Proportional + Ki*NewIntegral + Kd*NewDerivative),
+ %   io:format("PidValue, BaseOffset  ~p~n",[{PidValue,?BaseOffset}]),
+    ActualWidth=trunc(PidValue+?BaseOffset),
+ 
+ %   io:format("Proportional ~p~n",[Proportional]),
+ %   io:format("NewIntegral ~p~n",[NewIntegral]),
+ %   io:format("NewDerivative ~p~n",[NewDerivative]),
+    io:format("Kp*Proportional ~p~n",[Kp*Proportional]),
+    io:format("Ki*NewIntegral ~p~n",[Ki*NewIntegral]),
+    io:format("Kd*NewDerivative ~p~n",[Kd*NewDerivative]),
+    io:format("BaseOffset ~p~n",[?BaseOffset]),
+    io:format("Error ~p~n",[Error]),
+    io:format("ActualWidth ~p~n",[ActualWidth]),
     if
 	ActualWidth>PwmWidth->
 	    zigbee_devices:call(?Switch,set,["on"]),
