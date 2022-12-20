@@ -46,8 +46,8 @@
 %%-------------------------------------------------------------------
 -define(SetPoint,30).
 -define(Kp,6).
--define(Ki,0.01).
--define(Kd,1).
+-define(Ki,3).
+-define(Kd,3).
 -define(SampleInterval,15*1000).
 -define(PwmWidth,60*1000).
 -define(TempSensor,"temp_prototype").
@@ -242,23 +242,32 @@ do_control_loop(SetPoint,PwmWidth,PreviousError,Integral,Kp,Kd,Ki)->
     Dt=PwmWidth/1000,
     NewIntegral=Integral + Error*Dt,
     NewDerivative=trunc((Error-PreviousError)/Dt),
-    BaseOffset=trunc(PwmWidth/2),
-    PidValue=(Kp*Proportional + Ki*NewIntegral + Kd*NewDerivative)*1000,
-    io:format("PidValue, BaseOffset  ~p~n",[{PidValue,BaseOffset,?MODULE,?FUNCTION_NAME,?LINE}]),
-    ActualWidth=trunc(PidValue+BaseOffset),
+    ActualWidth=if
+		    Error>?MaxTempDiff->
+			PwmWidth;
+		    Error< (-1*?MaxTempDiff)->
+			0;
+		    true->
+			BaseOffset=trunc(PwmWidth/2),
+			PidValue=(Kp*Proportional + Ki*NewIntegral + Kd*NewDerivative)*1000,
+			io:format("PidValue, BaseOffset  ~p~n",[{PidValue,BaseOffset,?MODULE,?FUNCTION_NAME,?LINE}]),
+			trunc(PidValue+BaseOffset)
+		end,
     io:format("ActualWidth, Error, Proportional, NewIntegral, NewDerivative~p~n",[{ActualWidth, Error, Proportional, NewIntegral, NewDerivative,?MODULE,?FUNCTION_NAME,?LINE}]),
     if
+	ActualWidth>1000->
+	    zigbee_devices:call(?Switch,set,["on"]),
+	    timer:sleep(ActualWidth),
+	    zigbee_devices:call(?Switch,set,["off"]),
+	    timer:sleep(PwmWidth-ActualWidth);
 	ActualWidth>PwmWidth->
 	    zigbee_devices:call(?Switch,set,["on"]),
 	    timer:sleep(PwmWidth);
 	ActualWidth<1000->
 	    zigbee_devices:call(?Switch,set,["off"]),
-	    timer:sleep(PwmWidth);
-	true ->
-	    zigbee_devices:call(?Switch,set,["on"]),
-	    timer:sleep(ActualWidth),
-	    zigbee_devices:call(?Switch,set,["off"]),
-	    timer:sleep(PwmWidth-ActualWidth)
+	    timer:sleep(PwmWidth)
+	true->
+	    ok
     end,
     NewPreviousError=Error,
     rpc:cast(node(),?MODULE,control_loop,[NewPreviousError,NewIntegral]).
