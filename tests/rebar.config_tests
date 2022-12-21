@@ -1,10 +1,11 @@
 {erl_opts, [debug_info,{i,"include"}]}.
 {deps, [
-       {infra_service,{git,"https://github.com/joq62/infra_service.git", {branch,"main"}}}	
+       {resource_discovery,{git,"https://github.com/joq62/resource_discovery.git", {branch,"main"}}},
+       {common,{git,"https://github.com/joq62/common.git", {branch,"main"}}}
        ]
 }.
 
-{relx, [{release, {zigbee_devices, "0.1.0"},
+{relx, [{release, {connect_cluster, "0.1.0"},
          [
 	  sasl]},
 

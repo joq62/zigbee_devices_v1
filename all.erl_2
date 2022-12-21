@@ -11,23 +11,26 @@
 %%% -------------------------------------------------------------------
 -module(all).      
  
--export([start/1]).
+-export([start/0]).
 %% --------------------------------------------------------------------
 %% Include files
 %% --------------------------------------------------------------------
+
 
 %% --------------------------------------------------------------------
 %% Function: available_hosts()
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
-start([InfraNode,Cookie])->
+start()->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
-    ok=setup([InfraNode,Cookie]),
-   
-  %  ok=zigbee_tests:start(ClusterSpec),
-   % ok=pid_tests:start(),
-          
+
+    ok=setup(),
+       
+    ok=st_cl:start(),
+    ok=appl_tests:start(),
+    
+    
    
    
     io:format("Stop OK !!! ~p~n",[{?MODULE,?FUNCTION_NAME}]),
@@ -48,17 +51,11 @@ start([InfraNode,Cookie])->
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
 
-%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
-%% --------------------------------------------------------------------
-
-setup([InfraNode,Cookie])->
+setup()->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
-    
-    {ok,_}=common:start(),
-    {ok,_}=resource_discovery_server:start(),
-    pong=rd:ping(),
-    ok=connect_cluster:start([InfraNode,Cookie]),
-  
-    
+        
  
+    
+    io:format("Stop OK !!! ~p~n",[{?MODULE,?FUNCTION_NAME}]),
+
     ok.

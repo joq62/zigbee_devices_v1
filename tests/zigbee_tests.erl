@@ -11,7 +11,7 @@
 %%% -------------------------------------------------------------------
 -module(zigbee_tests).       
  
--export([start/0]).
+-export([start/1]).
 %% --------------------------------------------------------------------
 %% Include files
 %% --------------------------------------------------------------------
@@ -22,10 +22,10 @@
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
-start()->
+start(ClusterSpec)->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
 
-    ok=setup(),
+    ok=setup(ClusterSpec),
     ok=test_1(),
     ok=test_2(),
     ok=test_switch(),
@@ -191,37 +191,12 @@ test_1()->
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
--define(ClusterSpec,"prototype_c201").
-setup()->
+setup(ClusterSpec)->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
     
-    ok=application:set_env([{oam,[{cluster_spec,?ClusterSpec}]}]),
-    
-    
-    {ok,_}=db_etcd_server:start(),
-    db_etcd:install(),
-    ok=db_appl_instance:create_table(),
-    ok=db_cluster_instance:create_table(),
-    
-    {ok,ClusterDir}=db_cluster_spec:read(dir,?ClusterSpec),
-    case filelib:is_dir(ClusterDir) of
-	true->
-	    ok;
-	false->
-	    os:cmd("rm -rf "++ClusterDir),
-	    ok=file:make_dir(ClusterDir)
-    end,
-    {ok,_}=nodelog_server:start(),
-    {ok,_}=resource_discovery_server:start(),
-    {ok,_}=connect_server:start(),
-    {ok,_}=appl_server:start(),
-    {ok,_}=pod_server:start(),
     {ok,_}=zigbee_devices_server:start(),
     pong=zigbee_devices:ping(),
-    ok=application:start(oam),
-
-    ok=oam:new_db_info(),
-    Connects=db_cluster_instance:nodes(connect,?ClusterSpec),
+    Connects=db_cluster_instance:nodes(connect,ClusterSpec),
     Nodes=lists:append([rpc:call(Node,erlang,nodes,[],2000)||Node<-Connects]),
     [pong,pong,pong,pong,pong]=[net_adm:ping(Node)||Node<-lists:append(Connects,Nodes)],
     
