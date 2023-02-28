@@ -11,7 +11,7 @@
 %%% -------------------------------------------------------------------
 -module(zigbee_tests).       
  
--export([start/0]).
+-export([start/1]).
 %% --------------------------------------------------------------------
 %% Include files
 %% --------------------------------------------------------------------
@@ -22,10 +22,10 @@
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
-start()->
+start(ClusterSpec)->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
 
-    ok=setup(),
+    ok=setup(ClusterSpec),
     ok=test_1(),
     ok=test_2(),
     ok=test_switch(),
@@ -78,7 +78,7 @@ test_weather()-> %  check the prototype
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
     % "temp_prototype"
     DeviceName="temp_prototype",
-    {ok,[DeviceInfo|_]}=sd:call(hw_conbee_app,hw_conbee,device_info,[DeviceName],5000),
+    {ok,[DeviceInfo|_]}=rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000),
     ModelId=maps:get(device_model,DeviceInfo),
     [Module]=[maps:get(module,Map)||Map<-?DeviceInfo,
 				    ModelId==maps:get(model_id,Map)],
@@ -122,7 +122,7 @@ test_switch()-> %  check the prototype
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
     % "switch_prototype"
     DeviceName="switch_prototype",
-    {ok,[DeviceInfo1]}=sd:call(hw_conbee_app,hw_conbee,device_info,[DeviceName],5000),
+    {ok,[DeviceInfo1]}=rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000),
     ModelId=maps:get(device_model,DeviceInfo1),
     [Module]=[maps:get(module,Map)||Map<-?DeviceInfo,
 				    ModelId==maps:get(model_id,Map)],
@@ -147,7 +147,7 @@ test_2()-> %  check the prototype
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
     % "switch_prototype"
 
-    {ok,[DeviceInfo1]}=sd:call(hw_conbee_app,hw_conbee,device_info,["switch_prototype"],5000),
+    {ok,[DeviceInfo1]}=rd:rpc_call(hw_conbee,hw_conbee,device_info,["switch_prototype"],1000),
     
    % io:format("DeviceInfo1 ~p~n",[{DeviceInfo1,?MODULE,?FUNCTION_NAME}]),
     
@@ -171,9 +171,9 @@ test_2()-> %  check the prototype
 %% --------------------------------------------------------------------
 test_1()->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
-    AllSensors=sd:call(hw_conbee_app,hw_conbee,get_all_device_info,["sensors"],5000),
+    AllSensors=rd:rpc_call(hw_conbee,hw_conbee,get_all_device_info,["sensors"],2000),
     io:format("AllSensors ~p~n",[{AllSensors,?MODULE,?FUNCTION_NAME}]),
-    AllLights=sd:call(hw_conbee_app,hw_conbee,get_all_device_info,["lights"],5000),
+    AllLights=rd:rpc_call(hw_conbee,hw_conbee,get_all_device_info,["lights"],2000),
     io:format("AllLights ~p~n",[{AllLights,?MODULE,?FUNCTION_NAME}]),
     ModelsModules=[{maps:get(model_id,Map),maps:get(module,Map)}||Map<-?DeviceInfo],
     io:format("ModelsModules  ~p~n",[{ModelsModules,?MODULE,?FUNCTION_NAME}]),
@@ -191,7 +191,21 @@ test_1()->
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
-setup()->
+setup(ClusterSpec)->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
-     
+    
+    {ok,_}=zigbee_devices_server:start(),
+    pong=zigbee_devices:ping(),
+    Connects=db_cluster_instance:nodes(connect,ClusterSpec),
+    Nodes=lists:append([rpc:call(Node,erlang,nodes,[],2000)||Node<-Connects]),
+    [pong,pong,pong,pong,pong]=[net_adm:ping(Node)||Node<-lists:append(Connects,Nodes)],
+    
+    LocalTypeList=[oam,db_etcd,nodelog],
+    [rd:add_local_resource(LocalType,node())||LocalType<-LocalTypeList],
+                   %% Make it available for oam - debug
+    TargetTypeList=[hw_conbee],
+    [rd:add_target_resource_type(Type)||Type<-TargetTypeList],
+    rd:trade_resources(),
+    
+    timer:sleep(3000),
     ok.

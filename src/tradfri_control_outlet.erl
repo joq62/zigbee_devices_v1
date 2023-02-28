@@ -50,7 +50,7 @@
 %% Returns: non
 %% --------------------------------------------------------------------
 set(Name,State)->
-    rd:rpc_call(hw_conbee,hw_conbee,set,[Name,State],5000).
+    sd:call(hw_conbee_app,hw_conbee,set,[Name,State],5000).
 
 
 
@@ -60,12 +60,12 @@ set(Name,State)->
 %% Returns: non
 %% --------------------------------------------------------------------
 is_on(DeviceName)->
-    Result=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
-	       {error,Reason}->
-		   {error,Reason};
+    Result=case sd:call(hw_conbee_app,hw_conbee,device_info,[DeviceName],5000) of
 	       {ok,[DeviceInfo]}-> 
 		   Status=maps:get(device_status,DeviceInfo),
-		   maps:get(<<"on">>,Status)
+		   maps:get(<<"on">>,Status);
+	       Reason ->
+		    {error,[Reason,?MODULE,?LINE]}
 	   end,
     Result.
 
@@ -75,11 +75,11 @@ is_on(DeviceName)->
 %% Returns: non
 %% --------------------------------------------------------------------
 reachable(DeviceName)->
-   Result=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
-	       {error,Reason}->
-		   {error,Reason};
-	       {ok,[DeviceInfo]}->
+   Result=case sd:call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
+	      {ok,[DeviceInfo]}->
 		  Status=maps:get(device_status,DeviceInfo),
-		  maps:get(<<"reachable">>,Status)
+		  maps:get(<<"reachable">>,Status);
+	      Reason ->
+		  {error,[Reason,?MODULE,?LINE]} 
 	   end,
     Result.

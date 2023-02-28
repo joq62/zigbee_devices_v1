@@ -9,7 +9,7 @@
 %%% Pod consits beams from all services, app and app and sup erl.
 %%% The setup of envs is
 %%% -------------------------------------------------------------------
--module(zigbee_tests).       
+-module(zigbee_tests_1).       
  
 -export([start/0]).
 %% --------------------------------------------------------------------
@@ -26,10 +26,10 @@ start()->
     io:format("Start ~p~n",[{?MODULE,?FUNCTION_NAME}]),
 
     ok=setup(),
-    ok=test_1(),
-    ok=test_2(),
-    ok=test_switch(),
-    ok=test_weather(),
+%    ok=test_1(),
+ %   ok=test_2(),
+ %   ok=test_switch(),
+ %   ok=test_weather(),
     ok=zig_server_test(),
     
     

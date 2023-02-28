@@ -23,11 +23,7 @@
 	]).
 
 
--export([
 
-	 start/0,
-	 stop/0
-	]).
 
 
 %% gen_server callbacks
@@ -48,10 +44,6 @@
 
 	    
 %% call
-start()-> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-stop()-> gen_server:call(?MODULE, {stop},infinity).
-
-
 
 
 %% cast
@@ -69,7 +61,8 @@ stop()-> gen_server:call(?MODULE, {stop},infinity).
 %%          {stop, Reason}
 %% --------------------------------------------------------------------
 init([]) ->
-    rd:rpc_call(nodelog,nodelog,log,[notice,?MODULE_STRING,?LINE,["Server started"]]),
+    
+    sd:cast(nodelog,nodelog,log,[notice,?MODULE_STRING,?LINE,["Server started"]]),
     {ok, #state{}}.   
  
 
@@ -84,7 +77,7 @@ init([]) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
 handle_call({call,DeviceName,Function,Args},_From, State) ->
-    Reply=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
+    Reply=case sd:call(hw_conbee_app,hw_conbee,device_info,[DeviceName],5000) of
 	      {error,Reason}->
 		  {error,Reason};
 	      {ok,[DeviceInfo|_]}->
@@ -99,7 +92,7 @@ handle_call({call,DeviceName,Function,Args},_From, State) ->
     {reply, Reply, State};
 
 handle_call({set,DeviceName,Function,Args},_From, State) ->
-    Reply=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
+    Reply=case sd:call(hw_conbee_app,hw_conbee,device_info,[DeviceName],5000) of
 	      {error,Reason}->
 		  {error,Reason};
 	      {ok,[DeviceInfo|_]}->
@@ -114,7 +107,7 @@ handle_call({set,DeviceName,Function,Args},_From, State) ->
     {reply, Reply, State};
 
 handle_call({get,DeviceName,Function,Args},_From, State) ->
-    Reply=case rd:rpc_call(hw_conbee,hw_conbee,device_info,[DeviceName],1000) of
+    Reply=case sd:call(hw_conbee_app,hw_conbee,device_info,[DeviceName],5000) of
 	      {error,Reason}->
 		  {error,Reason};
 	      {ok,[DeviceInfo|_]}->
